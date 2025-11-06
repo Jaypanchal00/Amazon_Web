@@ -8,12 +8,12 @@
       "type": "image/x-icon"
     },
     {
-      "src": "logo192.png",
+      "src": "https://logo.clearbit.com/amazon.com?size=192",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "logo512.png",
+      "src": "https://logo.clearbit.com/amazon.com?size=512",
       "type": "image/png",
       "sizes": "512x512"
     }
