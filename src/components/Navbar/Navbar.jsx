@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { 
@@ -9,8 +9,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { categories } from '../../data/mockData';
-import { debounce } from '../../utils/helpers';
+import { categories, products } from '../../data/mockData';
+import { debounce, fuzzySearch } from '../../utils/helpers';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -24,6 +24,9 @@ const Navbar = () => {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -31,6 +34,53 @@ const Navbar = () => {
       navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
+
+  const buildSuggestions = (q) => {
+    const query = q.trim().toLowerCase();
+    if (!query) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    const scored = products.map(p => {
+      let score = 0;
+      const name = p.name.toLowerCase();
+      const brand = (p.brand || '').toLowerCase();
+      const category = (p.category || '').toLowerCase();
+      const desc = (p.description || '').toLowerCase();
+
+      if (name.includes(query)) score += 5;
+      if (brand.includes(query)) score += 3;
+      if (category.includes(query)) score += 2;
+      if (desc.includes(query)) score += 1;
+      if (score === 0) {
+        const fs = (
+          fuzzySearch(query, p.name) ||
+          fuzzySearch(query, p.brand || '') ||
+          fuzzySearch(query, p.category || '') ||
+          fuzzySearch(query, p.description || '')
+        );
+        if (fs) score += 1;
+      }
+      return { p, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map(x => x.p);
+
+    setSuggestions(scored);
+    setShowSuggestions(scored.length > 0);
+    setActiveIndex(-1);
+  };
+
+  const debouncedSuggest = useMemo(() => debounce(buildSuggestions, 200), []);
+
+  useEffect(() => {
+    debouncedSuggest(searchQuery);
+  }, [searchQuery, debouncedSuggest]);
 
   const handleVoiceSearch = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -79,24 +129,73 @@ const Navbar = () => {
             </div>
           </DeliveryLocation>
 
-          <SearchBar onSubmit={handleSearch}>
-            <SearchInput
-              type="text"
-              placeholder="Search Amazon.in"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <VoiceButton 
-              type="button" 
-              onClick={handleVoiceSearch}
-              $isListening={isListening}
-            >
-              <FaMicrophone />
-            </VoiceButton>
-            <SearchButton type="submit">
-              <FaSearch />
-            </SearchButton>
-          </SearchBar>
+          <SearchWrap>
+            <SearchBar onSubmit={handleSearch}>
+              <SearchInput
+                type="text"
+                placeholder="Search Amazon.in"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowSuggestions(suggestions.length > 0)}
+                onKeyDown={(e) => {
+                  if (!showSuggestions) return;
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActiveIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActiveIndex(prev => Math.max(prev - 1, 0));
+                  } else if (e.key === 'Enter') {
+                    if (activeIndex >= 0 && activeIndex < suggestions.length) {
+                      e.preventDefault();
+                      const sel = suggestions[activeIndex];
+                      setShowSuggestions(false);
+                      navigate(`/product/${sel.id}`);
+                    }
+                  } else if (e.key === 'Escape') {
+                    setShowSuggestions(false);
+                  }
+                }}
+              />
+              <VoiceButton 
+                type="button" 
+                onClick={handleVoiceSearch}
+                $isListening={isListening}
+              >
+                <FaMicrophone />
+              </VoiceButton>
+              <SearchButton type="submit">
+                <FaSearch />
+              </SearchButton>
+            </SearchBar>
+
+            {showSuggestions && (
+              <SuggestDropdown
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {suggestions.map((s, idx) => (
+                  <SuggestItem
+                    key={s.id}
+                    $active={idx === activeIndex}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    onClick={() => {
+                      setShowSuggestions(false);
+                      navigate(`/product/${s.id}`);
+                    }}
+                  >
+                    <SuggestThumb src={s.image} alt={s.name} />
+                    <SuggestText>
+                      <SuggestName>{s.name}</SuggestName>
+                      <SuggestMeta>{s.brand} • {s.category}</SuggestMeta>
+                    </SuggestText>
+                  </SuggestItem>
+                ))}
+                <SuggestFooter onClick={() => { setShowSuggestions(false); navigate(`/search?q=${encodeURIComponent(searchQuery)}`); }}>
+                  See all results for "{searchQuery}"
+                </SuggestFooter>
+              </SuggestDropdown>
+            )}
+          </SearchWrap>
 
           <NavOptions>
             <NavOption 
@@ -317,6 +416,11 @@ const SearchBar = styled.form`
   }
 `;
 
+const SearchWrap = styled.div`
+  position: relative;
+  flex: 1;
+`;
+
 const SearchInput = styled.input`
   flex: 1;
   padding: 10px;
@@ -326,6 +430,10 @@ const SearchInput = styled.input`
 
   &::placeholder {
     color: var(--text-secondary);
+  }
+
+  @media (max-width: 768px) {
+    font-size: 16px;
   }
 `;
 
@@ -361,6 +469,83 @@ const SearchButton = styled.button`
 
   svg {
     font-size: 18px;
+  }
+`;
+
+const SuggestDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  color: var(--text-primary);
+  border-radius: 4px;
+  box-shadow: var(--shadow-lg);
+  margin-top: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 1002;
+
+  @media (max-width: 768px) {
+    left: -10px;
+    right: -10px;
+    max-width: 100vw;
+  }
+`;
+
+const SuggestItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: ${props => props.$active ? 'var(--bg-hover)' : 'transparent'};
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+`;
+
+const SuggestThumb = styled.img`
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #f5f5f5;
+`;
+
+const SuggestText = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+`;
+
+const SuggestName = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const SuggestMeta = styled.span`
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const SuggestFooter = styled.div`
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-light);
+  color: var(--amazon-blue);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
   }
 `;
 
