@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { 
   FaSearch, FaShoppingCart, FaMapMarkerAlt, FaBars, 
-  FaUser, FaHeart, FaMicrophone, FaTimes 
+  FaHeart, FaMicrophone, FaTimes 
 } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
@@ -219,6 +219,9 @@ const Navbar = () => {
                       <DropdownLink to="/orders">Your Orders</DropdownLink>
                       <DropdownLink to="/wishlist">Your Wishlist</DropdownLink>
                       <DropdownLink to="/addresses">Your Addresses</DropdownLink>
+                      {user.role === 'admin' && (
+                        <DropdownLink to="/admin" style={{ color: 'var(--amazon-orange)', fontWeight: 'bold' }}>Admin Dashboard</DropdownLink>
+                      )}
                       {user.isPrime && (
                         <DropdownLink to="/prime">Prime Membership</DropdownLink>
                       )}
@@ -250,6 +253,13 @@ const Navbar = () => {
               </CartIcon>
               <Strong>Cart</Strong>
             </NavOption>
+
+            {user?.role === 'admin' && (
+              <NavOption onClick={() => navigate('/admin')} style={{ color: 'var(--amazon-orange)' }}>
+                <Small>Admin</Small>
+                <Strong>Panel</Strong>
+              </NavOption>
+            )}
 
             <ThemeToggle onClick={toggleTheme}>
               {theme === 'light' ? '🌙' : '☀️'}
@@ -331,6 +341,7 @@ const NavbarContainer = styled.nav`
   z-index: 1000;
   background-color: var(--amazon-blue);
   color: white;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 `;
 
 const TopNav = styled.div`
@@ -407,8 +418,14 @@ const SearchBar = styled.form`
   display: flex;
   align-items: center;
   background: white;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
+  transition: var(--transition);
+  box-shadow: 0 0 0 2px transparent;
+
+  &:focus-within {
+    box-shadow: 0 0 0 2px var(--amazon-orange), 0 4px 12px rgba(0,0,0,0.2);
+  }
 
   @media (max-width: 768px) {
     order: 3;
@@ -576,14 +593,16 @@ const AccountDropdown = styled.div`
   position: absolute;
   top: 100%;
   right: 0;
-  background: white;
+  background: var(--bg-primary);
   color: var(--text-primary);
-  min-width: 250px;
-  border-radius: 4px;
+  min-width: 280px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  padding: 15px;
-  margin-top: 5px;
-  animation: slideInDown 0.2s ease;
+  padding: 20px;
+  margin-top: 8px;
+  border: 1px solid var(--border-light);
+  animation: slideInDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1005;
 `;
 
 const DropdownButton = styled.button`
